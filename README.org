@@ -1,0 +1,84 @@
+#+TITLE: gc
+#+AUTHOR: Kevin Bulušek
+#+DESCRIPTION: a simple garbage collector for C programs
+#+OPTIONS: num:nil toc:nil
+#+STARTUP: showeverything
+
+* Description
+
+A simple garbage collector for C programs.  It requires explicit
+co-operation from the program and allocated data structures.
+
+* Usage
+
+Either copy the source and header files into your project, or use the
+included makefile and link with the resulting library.
+
+** Configuration
+
+The file [[file:gc_config.h][gc_config.h]] configures a couple of debugging defines.
+
+- =GC_DEBUG=: keep track of allocated memory and assert that all
+  allocations have been freed when the GC is freed.  It will also fill
+  memory with 0xFE bytes when collecting.
+
+- =GC_DEBUG_PRINT=: print statistics about memory usage when
+  collecting and freeing the GC.  Requires =GC_DEBUG= to be defined.
+
+By default, =GC_DEBUG= is defined.
+
+** Example Program
+
+#+BEGIN_SRC c
+  #include "gc.h"
+  
+  /* unspecified data structure with GC visit function */
+  struct data { /* ... */ };
+  void data_gc_visit(void *);
+  
+  /* graph structure */
+  
+  struct edge {
+          struct node *node;
+          struct edge *next;
+  };
+  
+  struct node {
+          struct edge *edges;
+          struct data *value;
+  };
+  
+  void node_gc_visit(void *);
+  
+  void edge_gc_visit(void *ptr)
+  {
+          struct edge *edge = (struct edge *) ptr;
+          gc_mark(edge->node, node_gc_visit);
+          gc_mark(edge->next, edge_gc_visit);
+  }
+  
+  void node_gc_visit(void *ptr)
+  {
+          struct node *node = (struct node *) ptr;
+          gc_mark(node->edges, edge_gc_visit);
+          gc_mark(node->value, data_gc_visit);
+  }
+  
+  int main(int argc, char *argv[])
+  {
+          GC *gc = make_gc();
+  
+          struct node *root = /* create graph, allocating nodes with gc ... */;
+  
+          /* manipulate graph, adding/removing nodes with gc ... */;
+  
+          gc_mark(root, node_gc_visit);
+          gc_collect(gc);
+  
+          /* more graph manipulation ... */
+  
+          free_gc(gc);
+  
+          return 0;
+  }
+#+END_SRC
